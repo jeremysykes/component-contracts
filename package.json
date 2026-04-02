@@ -1,0 +1,29 @@
+{
+  "name": "component-contracts",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Two MCP servers: variant-authority for CVA component registries and radix-primitives for Radix UI capability maps",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "variant-authority": "dist/variant-authority/server.js",
+    "radix-primitives": "dist/radix-primitives/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev:va": "tsx src/variant-authority/server.ts",
+    "dev:rp": "tsx src/radix-primitives/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}
