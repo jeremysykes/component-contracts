@@ -4,6 +4,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Dialog: {
     name: "Dialog",
     radixPackage: "@radix-ui/react-dialog",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "dialog",
       keyboardInteractions: [
@@ -33,6 +34,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Popover: {
     name: "Popover",
     radixPackage: "@radix-ui/react-popover",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "dialog",
       keyboardInteractions: [
@@ -66,6 +68,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Tooltip: {
     name: "Tooltip",
     radixPackage: "@radix-ui/react-tooltip",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "tooltip",
       keyboardInteractions: [
@@ -95,6 +98,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Select: {
     name: "Select",
     radixPackage: "@radix-ui/react-select",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "listbox",
       keyboardInteractions: [
@@ -130,6 +134,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Tabs: {
     name: "Tabs",
     radixPackage: "@radix-ui/react-tabs",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "tablist",
       keyboardInteractions: [
@@ -164,6 +169,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Accordion: {
     name: "Accordion",
     radixPackage: "@radix-ui/react-accordion",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "region",
       keyboardInteractions: [
@@ -193,6 +199,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Checkbox: {
     name: "Checkbox",
     radixPackage: "@radix-ui/react-checkbox",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "checkbox",
       keyboardInteractions: ["Space toggles checked state"],
@@ -220,6 +227,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   RadioGroup: {
     name: "RadioGroup",
     radixPackage: "@radix-ui/react-radio-group",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "radiogroup",
       keyboardInteractions: [
@@ -257,6 +265,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Switch: {
     name: "Switch",
     radixPackage: "@radix-ui/react-switch",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "switch",
       keyboardInteractions: ["Space toggles the switch", "Enter toggles the switch"],
@@ -283,6 +292,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Slider: {
     name: "Slider",
     radixPackage: "@radix-ui/react-slider",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "slider",
       keyboardInteractions: [
@@ -323,6 +333,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   DropdownMenu: {
     name: "DropdownMenu",
     radixPackage: "@radix-ui/react-dropdown-menu",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "menu",
       keyboardInteractions: [
@@ -365,6 +376,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   AlertDialog: {
     name: "AlertDialog",
     radixPackage: "@radix-ui/react-alert-dialog",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "alertdialog",
       keyboardInteractions: [
@@ -402,6 +414,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Toggle: {
     name: "Toggle",
     radixPackage: "@radix-ui/react-toggle",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "button",
       keyboardInteractions: [
@@ -430,6 +443,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   ToggleGroup: {
     name: "ToggleGroup",
     radixPackage: "@radix-ui/react-toggle-group",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "group",
       keyboardInteractions: [
@@ -464,6 +478,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Separator: {
     name: "Separator",
     radixPackage: "@radix-ui/react-separator",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "separator",
       keyboardInteractions: [],
@@ -490,6 +505,7 @@ export const CAPABILITY_MAP: Record<string, PrimitiveCapability> = {
   Label: {
     name: "Label",
     radixPackage: "@radix-ui/react-label",
+    vuePackage: "radix-vue",
     accessibilityContract: {
       role: "label",
       keyboardInteractions: [
