@@ -1,130 +1,116 @@
 # component-contracts
 
-> Two MCP servers in one package: a Variant Authority server that manages CVA component registries across design and code, and a Primitives server that maps Radix UI composition patterns and accessibility contracts. Used by the d2c skill to enforce component authority across the full lifecycle.
+Two MCP servers that form the authority layer for design-to-code component lifecycles.
 
----
+## Overview
 
-## What this is
+**Variant Authority** is the engineering contract for your component library. It defines what variants exist on a component, what slots are required, how design tokens map between Figma and code, and what happens when a component is deprecated. When a variant surface changes, it classifies the diff as major, minor, or patch so consumers know the impact before shipping.
 
-`component-contracts` is a TypeScript MCP package that exposes two servers:
+**Radix Primitives** is the accessibility foundation. It maps component types to Radix UI primitives, exposes the ARIA contracts and keyboard interactions that come free with each primitive, and documents known caveats and workarounds. Together, these two servers are the source of truth that d2c operates on -- one for structural correctness, the other for accessible composition.
 
-**`variant-authority`** — a registry layer for CVA-based component variant manifests. It stores the canonical definition of every component's variant surface, tracks deprecations, maps consumer usage, and diffs manifests across versions to classify breaking vs non-breaking changes.
+## Tool surface
 
-**`radix-primitives`** — a capability map for Radix UI primitives. It tells the d2c skill which Radix primitive to use as the base for a given component, what the primitive's accessibility contract is, and what the known composition patterns and caveats are.
-
-Together they form the **authority layer** in the d2c lifecycle — the source of truth for what a component *is allowed to be* in both design and code.
-
----
-
-## Why these two servers live together
-
-Both servers answer the same question from different angles: *what are the rules for this component?*
-
-`variant-authority` answers it from the engineering contract side — which variants are allowed, which are deprecated, which props exist. `radix-primitives` answers it from the primitive foundation side — which base element should this component be built on, what accessibility behavior comes for free, what are the gotchas.
-
-A skill building a `Select` component needs both answers before writing a line of code. Keeping them in one package means one install, one configuration block, and one connection check.
-
----
-
-## Servers
-
-### `variant-authority`
-
-Manages the component variant registry stored at `.variant-authority/` in the consuming repo.
-
-#### Tools
+### Variant Authority (5 tools)
 
 | Tool | Description |
 |---|---|
-| `get_manifest(component)` | Returns the full variant manifest for a component: allowed values, deprecated variants, migration paths, last-updated timestamp |
-| `set_manifest(component, manifest)` | Writes or updates the registry entry for a component |
-| `deprecate_variant(component, variant, replacement)` | Marks a variant as deprecated and records the migration path |
-| `get_usage(component)` | Returns the consumer surface map: which files and repos import this component and at what version |
-| `diff_manifests(component, before, after)` | Diffs two manifest versions and classifies changes as `major`, `minor`, or `patch` |
-| `validate_props(component, props)` | Validates a props object against the manifest. Returns `pass` or `fail` with a list of violations |
+| `get_manifest(component)` | Returns the full variant manifest |
+| `set_manifest(component, manifest)` | Writes or updates a manifest, validates with `isVariantManifest()` |
+| `get_usage(component)` | Scans workspace for files importing the component |
+| `diff_manifests(component, before, after)` | Classifies changes as major/minor/patch |
+| `validate_usage(component, props)` | Validates variant values and required slots |
 
-#### Registry schema
+### Radix Primitives (4 tools)
 
-Each component entry in `.variant-authority/` is a JSON file named `{component}.manifest.json`:
+| Tool | Description |
+|---|---|
+| `get_primitive(name)` | Returns accessibility contract, composition pattern, caveats |
+| `get_composition_pattern(component)` | Maps a component type to its Radix primitive |
+| `get_caveats(primitive)` | Returns known issues and workarounds |
+| `list_primitives()` | Enumerates all 16 available primitives |
+
+## VariantManifest schema
 
 ```typescript
 interface VariantManifest {
-  component: string
-  version: string
-  status: 'alpha' | 'beta' | 'stable' | 'deprecated'
-  variants: {
-    [variantName: string]: {
-      values: string[]
-      default: string
-      deprecated?: string[]
-      migrations?: Record<string, string>
-    }
-  }
-  props: {
-    [propName: string]: {
-      type: string
-      required: boolean
-      deprecated?: boolean
-      replacement?: string
-    }
-  }
-  consumers: string[]
-  deprecatedAt?: string
-  replacedBy?: string
-  lastUpdated: string
+  component: string;
+  version: string;
+  figmaFileKey: string;
+  figmaNodeId: string;
+  variants: Record<string, VariantDefinition>;
+  slots: SlotDefinition[];
+  tokens: Record<string, TokenBinding>;
+  authority: AuthorityMap;
+  deprecated?: DeprecationInfo;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface VariantDefinition {
+  values: string[];
+  defaultValue: string;
+  type: "string" | "boolean" | "number";
+  description?: string;
+}
+
+interface SlotDefinition {
+  name: string;
+  required: boolean;
+  description?: string;
+}
+
+interface TokenBinding {
+  figmaValue: string;
+  codeValue: string;
+  dtcgPath: string;
+  category: "color" | "spacing" | "typography" | "border" | "shadow" | "opacity";
+}
+
+interface AuthorityMap {
+  structure: "figma" | "cva";
+  visual: "figma" | "cva";
+  conflictStrategy: "escalate" | "figma-wins" | "cva-wins";
+}
+
+interface DeprecationInfo {
+  deprecated: true;
+  replacedBy: string;
+  migrationGuide: string;
+  deprecatedAt: string;
+  removalTarget?: string;
 }
 ```
 
----
-
-### `radix-primitives`
-
-A static capability map over the Radix UI primitive surface. Does not write to any registry — read-only.
-
-#### Tools
-
-| Tool | Description |
-|---|---|
-| `get_primitive(name)` | Returns the primitive API, accessibility contract, composition pattern, and known caveats |
-| `get_composition_pattern(component)` | Returns the recommended Radix primitive(s) for a given component type (e.g. `Select` → `Radix Select`, `Badge` → none) |
-| `get_caveats(primitive)` | Returns known issues, workarounds, and version-specific behavior for a primitive |
-| `list_primitives()` | Returns all available primitives with a one-line description |
-
-#### Capability map schema
+## PrimitiveCapability schema
 
 ```typescript
 interface PrimitiveCapability {
-  name: string
-  radixPackage: string | null
+  name: string;
+  radixPackage: string | null;
+  vuePackage: string | null;
   accessibilityContract: {
-    role: string
-    keyboardInteractions: string[]
-    ariaAttributes: string[]
-  }
-  compositionPattern: string
-  caveats: string[]
-  recommendedFor: string[]
-  avoidFor: string[]
-  version: string
+    role: string;
+    keyboardInteractions: string[];
+    ariaAttributes: string[];
+  };
+  compositionPattern: string;
+  caveats: string[];
+  recommendedFor: string[];
+  avoidFor: string[];
+  version: string;
 }
 ```
 
----
-
 ## Installation
 
-```bash
-npm install component-contracts
-```
-
-### Add to Claude Code
+### Claude Code
 
 ```bash
-claude mcp add variant-authority node ./node_modules/component-contracts/dist/variant-authority.js
-claude mcp add radix-primitives node ./node_modules/component-contracts/dist/radix-primitives.js
+claude mcp add variant-authority -- npx tsx src/variant-authority/server.ts
+claude mcp add radix-primitives -- npx tsx src/radix-primitives/server.ts
 ```
 
-### Add to Cursor
+### Cursor
 
 In `.cursor/mcp.json`:
 
@@ -132,108 +118,56 @@ In `.cursor/mcp.json`:
 {
   "mcpServers": {
     "variant-authority": {
-      "command": "node",
-      "args": ["./node_modules/component-contracts/dist/variant-authority.js"]
+      "command": "npx",
+      "args": ["tsx", "src/variant-authority/server.ts"]
     },
     "radix-primitives": {
-      "command": "node",
-      "args": ["./node_modules/component-contracts/dist/radix-primitives.js"]
+      "command": "npx",
+      "args": ["tsx", "src/radix-primitives/server.ts"]
     }
   }
 }
 ```
 
-### Add to Codex CLI
+### Codex CLI
 
 ```bash
-codex mcp add variant-authority node ./node_modules/component-contracts/dist/variant-authority.js
-codex mcp add radix-primitives node ./node_modules/component-contracts/dist/radix-primitives.js
+codex mcp add variant-authority -- npx tsx src/variant-authority/server.ts
+codex mcp add radix-primitives -- npx tsx src/radix-primitives/server.ts
 ```
 
----
+## Development
 
-## Project structure
+### npm scripts
+
+| Script | Purpose |
+|---|---|
+| `npm run build` | Compile TypeScript with `tsc` |
+| `npm test` | Run tests with Vitest |
+| `npm run dev:va` | Start variant-authority server in dev mode |
+| `npm run dev:rp` | Start radix-primitives server in dev mode |
+
+### Project structure
 
 ```
 component-contracts/
   src/
     variant-authority/
-      server.ts             ← MCP server entry point
-      registry.ts           ← JSON registry read/write
-      diff.ts               ← Manifest diff + semver classification
-      validate.ts           ← Props validation against manifest
-      tools/
-        get_manifest.ts
-        set_manifest.ts
-        deprecate_variant.ts
-        get_usage.ts
-        diff_manifests.ts
-        validate_props.ts
+      server.ts             MCP server entry point
+      registry.ts           JSON registry read/write
     radix-primitives/
-      server.ts             ← MCP server entry point
-      capability-map.ts     ← Static primitive data
-      tools/
-        get_primitive.ts
-        get_composition_pattern.ts
-        get_caveats.ts
-        list_primitives.ts
+      server.ts             MCP server entry point
+      capability-map.ts     Static primitive data
     shared/
-      schemas.ts            ← Shared TypeScript interfaces
-      errors.ts             ← Shared error types
-  dist/
-    variant-authority.js    ← Compiled server
-    radix-primitives.js     ← Compiled server
-  specs/                    ← Spec-first development docs
-  context/                  ← Context documentation per feature
-  tests/                    ← Test files
-    variant-authority/
-    radix-primitives/
-  .variant-authority/       ← Registry storage (gitignored in consuming repos)
+      schemas.ts            TypeScript interfaces + validation
+      errors.ts             Shared error types
+  dist/                     Compiled output
+  .variant-authority/       Registry storage (gitignored in consuming repos)
 ```
-
----
-
-## Development philosophy
-
-This project follows **spec-first development**. Every feature is developed in this order with no exceptions:
-
-1. **Spec** — `specs/feature-name.md` written first. Defines purpose, inputs, outputs, edge cases, and acceptance criteria.
-2. **Tests** — `tests/feature-name.test.ts` written second. Tests that will fail against a non-existent implementation.
-3. **Context** — `context/feature-name.md` written third. Documents which external APIs are touched, which schemas are affected, which MCP tools are involved.
-4. **Implementation** — written last, after steps 1–3 are reviewed and approved.
-
-No implementation code exists in this repo without a corresponding spec and test file.
-
----
-
-## Compatibility
-
-Both servers implement the [Model Context Protocol](https://modelcontextprotocol.io) using the TypeScript MCP SDK. They are compatible with any MCP client that supports the standard tool calling interface:
-
-- Claude Code
-- Cursor
-- Codex CLI
-- Any MCP-compatible agent
-
----
 
 ## Relationship to d2c
 
-`component-contracts` is a dependency of the [d2c skill](https://github.com/jeremysykes/d2c). The d2c skill uses `variant-authority` to seed, read, and update the component registry across all six lifecycle phases. It uses `radix-primitives` during the build phase to determine the correct primitive base for each scaffolded component.
-
-`component-contracts` is designed to be useful independently of d2c — any design system tooling that needs a persistent variant registry or a Radix capability map can use these servers directly.
-
----
-
-## What's next
-
-**Storybook integration** — a third server (`storybook-contracts`) that reads `parameters.status` from deployed Storybook stories and syncs lifecycle status back to the variant registry.
-
-**Framework expansion** — the Radix capability map currently covers React. Vue Primitives (@radix-vue) and Web Components (@radix-ui/primitives) are the next targets.
-
-**Registry persistence options** — the current registry uses flat JSON files. A SQLite backend option would support larger design systems with hundreds of components.
-
----
+`component-contracts` provides the authority layer. `d2c` provides the lifecycle operator. During its phases, d2c calls these MCP servers to read and write variant manifests, query primitive mappings, and validate component usage. The two packages are designed to work together but can be used independently -- any tooling that needs a persistent variant registry or a Radix capability map can consume these servers directly.
 
 ## License
 
