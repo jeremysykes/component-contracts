@@ -64,28 +64,28 @@ describe("diff function references aligned fields", () => {
   it("references tokens in diff logic", () => {
     const diffIdx = serverContent.indexOf("function diffManifests");
     expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 3000);
+    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
     expect(diffBlock).toMatch(/tokens/);
   });
 
   it("references authority in diff logic", () => {
     const diffIdx = serverContent.indexOf("function diffManifests");
     expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 3000);
+    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
     expect(diffBlock).toMatch(/authority/);
   });
 
   it("does NOT reference props in diff logic", () => {
     const diffIdx = serverContent.indexOf("function diffManifests");
     expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 3000);
+    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
     expect(diffBlock).not.toMatch(/\.props/);
   });
 
   it("does NOT reference status in diff logic", () => {
     const diffIdx = serverContent.indexOf("function diffManifests");
     expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 3000);
+    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
     expect(diffBlock).not.toMatch(/\.status/);
   });
 });

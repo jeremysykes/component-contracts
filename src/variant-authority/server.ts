@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { readManifest, writeManifest, manifestExists } from "./registry.js";
+import { isVariantManifest } from "../shared/schemas.js";
 import type { VariantManifest } from "../shared/schemas.js";
 import { ManifestNotFoundError } from "../shared/errors.js";
 import { readdir, readFile } from "node:fs/promises";
@@ -24,7 +25,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "get_manifest",
       description:
-        "Returns the full variant manifest for a component: allowed values, deprecated variants, migration paths, last-updated timestamp.",
+        "Returns the full variant manifest for a component: variant definitions, slots, tokens, authority map, and timestamps.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -38,7 +39,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "set_manifest",
-      description: "Writes or updates the registry entry for a component.",
+      description:
+        "Writes or updates the registry entry for a component. Validates the manifest before writing.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -52,35 +54,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ["component", "manifest"],
-      },
-    },
-    {
-      name: "deprecate_variant",
-      description:
-        "Marks a variant value as deprecated and records the migration path.",
-      inputSchema: {
-        type: "object" as const,
-        properties: {
-          component: {
-            type: "string",
-            description: "The component name",
-          },
-          variant: {
-            type: "string",
-            description:
-              "The variant group name (e.g. size, intent)",
-          },
-          value: {
-            type: "string",
-            description: "The variant value to deprecate (e.g. sm, danger)",
-          },
-          replacement: {
-            type: "string",
-            description:
-              "The replacement value to migrate to (e.g. small, destructive)",
-          },
-        },
-        required: ["component", "variant", "value", "replacement"],
       },
     },
     {
@@ -122,9 +95,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: "validate_props",
+      name: "validate_usage",
       description:
-        "Validates a props object against the manifest variants. Returns pass or fail with a list of violations.",
+        "Validates a usage object against the manifest: checks variant values, required slots, and component-level deprecation. Returns pass or fail with a list of violations.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -132,12 +105,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             description: "The component name",
           },
-          props: {
+          usage: {
             type: "object",
-            description: "The props object to validate",
+            description:
+              "The usage object to validate — variant values and slot names",
           },
         },
-        required: ["component", "props"],
+        required: ["component", "usage"],
       },
     },
   ],
@@ -171,11 +145,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case "set_manifest": {
       const component = args?.component as string;
-      const manifest = args?.manifest as VariantManifest;
+      const manifest = args?.manifest as Record<string, unknown>;
+
+      if (!isVariantManifest(manifest)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Invalid manifest: does not conform to VariantManifest schema. Ensure component, version, figmaFileKey, figmaNodeId, variants, slots, tokens, authority, createdAt, and updatedAt are present and correctly typed.",
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Preserve createdAt from existing manifest if it exists
+      let createdAt = manifest.createdAt;
+      if (await manifestExists(component)) {
+        try {
+          const existing = await readManifest(component);
+          if (existing.createdAt) {
+            createdAt = existing.createdAt;
+          }
+        } catch {
+          // If read fails, use the provided createdAt
+        }
+      }
+
       const fullManifest: VariantManifest = {
         ...manifest,
         component,
-        lastUpdated: new Date().toISOString(),
+        createdAt,
+        updatedAt: new Date().toISOString(),
       };
       await writeManifest(component, fullManifest);
       return {
@@ -183,69 +184,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           {
             type: "text",
             text: `Manifest for "${component}" written successfully.`,
-          },
-        ],
-      };
-    }
-
-    case "deprecate_variant": {
-      const component = args?.component as string;
-      const variantGroup = args?.variant as string;
-      const value = args?.value as string;
-      const replacement = args?.replacement as string;
-
-      if (!(await manifestExists(component))) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Manifest not found for component: ${component}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const manifest = await readManifest(component);
-      const group = manifest.variants[variantGroup];
-      if (!group) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Variant group "${variantGroup}" not found in ${component} manifest.`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      if (!group.values.includes(value)) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Value "${value}" not found in variant group "${variantGroup}".`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      if (!group.deprecated) group.deprecated = [];
-      if (!group.deprecated.includes(value)) group.deprecated.push(value);
-
-      if (!group.migrations) group.migrations = {};
-      group.migrations[value] = replacement;
-
-      manifest.lastUpdated = new Date().toISOString();
-      await writeManifest(component, manifest);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Variant "${variantGroup}.${value}" deprecated in ${component}. Migration: ${value} → ${replacement}`,
           },
         ],
       };
@@ -278,9 +216,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
-    case "validate_props": {
+    case "validate_usage": {
       const component = args?.component as string;
-      const props = args?.props as Record<string, unknown>;
+      const usage = args?.usage as Record<string, unknown>;
 
       if (!(await manifestExists(component))) {
         return {
@@ -295,7 +233,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       const manifest = await readManifest(component);
-      const result = validateProps(manifest, props);
+      const result = validateUsage(manifest, usage);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
@@ -352,7 +290,6 @@ async function scanForUsage(
 
         try {
           const content = await readFile(fullPath, "utf-8");
-          // Match import statements or require calls referencing the component
           const importPattern = new RegExp(
             `(?:import\\s+.*\\b${component}\\b|from\\s+['"][^'"]*${component}[^'"]*['"]|require\\(['"][^'"]*${component}[^'"]*['"]\\))`,
             "m"
@@ -392,18 +329,7 @@ function diffManifests(
   let hasMajor = false;
   let hasMinor = false;
 
-  // Status change
-  if (before.status !== after.status) {
-    changes.push({
-      type: "changed",
-      path: "status",
-      detail: `${before.status} → ${after.status}`,
-    });
-    if (after.status === "deprecated") hasMajor = true;
-    else hasMinor = true;
-  }
-
-  // Variant groups
+  // ── Variant groups ──────────────────────────────────────────────────
   const allVariantKeys = new Set([
     ...Object.keys(before.variants || {}),
     ...Object.keys(after.variants || {}),
@@ -428,7 +354,7 @@ function diffManifests(
       });
       hasMajor = true;
     } else if (bGroup && aGroup) {
-      // Check removed values (breaking)
+      // Removed values (breaking)
       const removedValues = bGroup.values.filter(
         (v) => !aGroup.values.includes(v)
       );
@@ -440,7 +366,7 @@ function diffManifests(
         });
         hasMajor = true;
       }
-      // Check added values (minor)
+      // Added values (minor)
       const addedValues = aGroup.values.filter(
         (v) => !bGroup.values.includes(v)
       );
@@ -452,88 +378,181 @@ function diffManifests(
         });
         hasMinor = true;
       }
-      // Default change
-      if (bGroup.default !== aGroup.default) {
+      // Default value change
+      if (bGroup.defaultValue !== aGroup.defaultValue) {
         changes.push({
           type: "changed",
-          path: `variants.${key}.default`,
-          detail: `${bGroup.default} → ${aGroup.default}`,
+          path: `variants.${key}.defaultValue`,
+          detail: `${bGroup.defaultValue} → ${aGroup.defaultValue}`,
         });
         hasMajor = true;
       }
-      // New deprecations
-      const newDeprecations = (aGroup.deprecated || []).filter(
-        (d) => !(bGroup.deprecated || []).includes(d)
-      );
-      if (newDeprecations.length > 0) {
+      // Type change
+      if (bGroup.type !== aGroup.type) {
         changes.push({
           type: "changed",
-          path: `variants.${key}.deprecated`,
-          detail: `Newly deprecated: ${newDeprecations.join(", ")}`,
+          path: `variants.${key}.type`,
+          detail: `${bGroup.type} → ${aGroup.type}`,
+        });
+        hasMajor = true;
+      }
+    }
+  }
+
+  // ── Slots ───────────────────────────────────────────────────────────
+  const beforeSlotNames = new Set(
+    (before.slots || []).map((s) => s.name)
+  );
+  const afterSlotNames = new Set(
+    (after.slots || []).map((s) => s.name)
+  );
+
+  for (const slot of after.slots || []) {
+    if (!beforeSlotNames.has(slot.name)) {
+      changes.push({
+        type: "added",
+        path: `slots.${slot.name}`,
+        detail: `New slot (required: ${slot.required})`,
+      });
+      if (slot.required) hasMajor = true;
+      else hasMinor = true;
+    }
+  }
+
+  for (const slot of before.slots || []) {
+    if (!afterSlotNames.has(slot.name)) {
+      changes.push({
+        type: "removed",
+        path: `slots.${slot.name}`,
+        detail: `Removed slot (was required: ${slot.required})`,
+      });
+      hasMajor = true;
+    }
+  }
+
+  // Check changed required flag on existing slots
+  for (const aSlot of after.slots || []) {
+    if (beforeSlotNames.has(aSlot.name)) {
+      const bSlot = (before.slots || []).find((s) => s.name === aSlot.name);
+      if (bSlot && bSlot.required !== aSlot.required) {
+        changes.push({
+          type: "changed",
+          path: `slots.${aSlot.name}.required`,
+          detail: `${bSlot.required} → ${aSlot.required}`,
+        });
+        if (aSlot.required) hasMajor = true;
+        else hasMinor = true;
+      }
+    }
+  }
+
+  // ── Tokens ──────────────────────────────────────────────────────────
+  const allTokenKeys = new Set([
+    ...Object.keys(before.tokens || {}),
+    ...Object.keys(after.tokens || {}),
+  ]);
+
+  for (const key of allTokenKeys) {
+    const bToken = before.tokens?.[key];
+    const aToken = after.tokens?.[key];
+
+    if (!bToken && aToken) {
+      changes.push({
+        type: "added",
+        path: `tokens.${key}`,
+        detail: `New token binding: figmaValue=${aToken.figmaValue}, codeValue=${aToken.codeValue}`,
+      });
+      hasMinor = true;
+    } else if (bToken && !aToken) {
+      changes.push({
+        type: "removed",
+        path: `tokens.${key}`,
+        detail: `Removed token binding (was figmaValue=${bToken.figmaValue}, codeValue=${bToken.codeValue})`,
+      });
+      hasMajor = true;
+    } else if (bToken && aToken) {
+      if (bToken.figmaValue !== aToken.figmaValue) {
+        changes.push({
+          type: "changed",
+          path: `tokens.${key}.figmaValue`,
+          detail: `${bToken.figmaValue} → ${aToken.figmaValue}`,
+        });
+        hasMinor = true;
+      }
+      if (bToken.codeValue !== aToken.codeValue) {
+        changes.push({
+          type: "changed",
+          path: `tokens.${key}.codeValue`,
+          detail: `${bToken.codeValue} → ${aToken.codeValue}`,
         });
         hasMinor = true;
       }
     }
   }
 
-  // Props
-  const allPropKeys = new Set([
-    ...Object.keys(before.props || {}),
-    ...Object.keys(after.props || {}),
-  ]);
+  // ── Authority ───────────────────────────────────────────────────────
+  const bAuth = before.authority;
+  const aAuth = after.authority;
 
-  for (const key of allPropKeys) {
-    const bProp = before.props?.[key];
-    const aProp = after.props?.[key];
-
-    if (!bProp && aProp) {
+  if (bAuth && aAuth) {
+    if (bAuth.structure !== aAuth.structure) {
       changes.push({
-        type: "added",
-        path: `props.${key}`,
-        detail: `New prop: type=${aProp.type}, required=${aProp.required}`,
-      });
-      if (aProp.required) hasMajor = true;
-      else hasMinor = true;
-    } else if (bProp && !aProp) {
-      changes.push({
-        type: "removed",
-        path: `props.${key}`,
-        detail: `Removed prop (was type=${bProp.type}, required=${bProp.required})`,
+        type: "changed",
+        path: "authority.structure",
+        detail: `${bAuth.structure} → ${aAuth.structure}`,
       });
       hasMajor = true;
-    } else if (bProp && aProp) {
-      if (bProp.type !== aProp.type) {
-        changes.push({
-          type: "changed",
-          path: `props.${key}.type`,
-          detail: `${bProp.type} → ${aProp.type}`,
-        });
-        hasMajor = true;
-      }
-      if (!bProp.required && aProp.required) {
-        changes.push({
-          type: "changed",
-          path: `props.${key}.required`,
-          detail: `Made required`,
-        });
-        hasMajor = true;
-      } else if (bProp.required && !aProp.required) {
-        changes.push({
-          type: "changed",
-          path: `props.${key}.required`,
-          detail: `Made optional`,
-        });
-        hasMinor = true;
-      }
-      if (!bProp.deprecated && aProp.deprecated) {
-        changes.push({
-          type: "changed",
-          path: `props.${key}.deprecated`,
-          detail: `Marked as deprecated${aProp.replacement ? `, replacement: ${aProp.replacement}` : ""}`,
-        });
-        hasMinor = true;
-      }
     }
+    if (bAuth.visual !== aAuth.visual) {
+      changes.push({
+        type: "changed",
+        path: "authority.visual",
+        detail: `${bAuth.visual} → ${aAuth.visual}`,
+      });
+      hasMajor = true;
+    }
+    if (bAuth.conflictStrategy !== aAuth.conflictStrategy) {
+      changes.push({
+        type: "changed",
+        path: "authority.conflictStrategy",
+        detail: `${bAuth.conflictStrategy} → ${aAuth.conflictStrategy}`,
+      });
+      hasMajor = true;
+    }
+  } else if (!bAuth && aAuth) {
+    changes.push({
+      type: "added",
+      path: "authority",
+      detail: `Authority map added: structure=${aAuth.structure}, visual=${aAuth.visual}, conflictStrategy=${aAuth.conflictStrategy}`,
+    });
+    hasMajor = true;
+  } else if (bAuth && !aAuth) {
+    changes.push({
+      type: "removed",
+      path: "authority",
+      detail: `Authority map removed`,
+    });
+    hasMajor = true;
+  }
+
+  // ── Component-level deprecated ──────────────────────────────────────
+  const bDeprecated = before.deprecated?.deprecated === true;
+  const aDeprecated = after.deprecated?.deprecated === true;
+
+  if (!bDeprecated && aDeprecated) {
+    changes.push({
+      type: "added",
+      path: "deprecated",
+      detail: `Component marked as deprecated (replacedBy: ${after.deprecated?.replacedBy ?? "unknown"})`,
+    });
+    hasMajor = true;
+  } else if (bDeprecated && !aDeprecated) {
+    changes.push({
+      type: "removed",
+      path: "deprecated",
+      detail: `Component deprecation removed`,
+    });
+    hasMinor = true;
   }
 
   let classification: "major" | "minor" | "patch";
@@ -550,45 +569,50 @@ interface ValidationResult {
   violations: string[];
 }
 
-function validateProps(
+function validateUsage(
   manifest: VariantManifest,
-  props: Record<string, unknown>
+  usage: Record<string, unknown>
 ): ValidationResult {
   const violations: string[] = [];
 
-  // Check variant props
-  for (const [key, value] of Object.entries(props)) {
-    const variantGroup = manifest.variants[key];
-    if (variantGroup) {
-      if (typeof value === "string" && !variantGroup.values.includes(value)) {
+  // Component-level deprecation warning
+  if (manifest.deprecated?.deprecated === true) {
+    const replacement = manifest.deprecated.replacedBy;
+    violations.push(
+      `Component "${manifest.component}" is deprecated${replacement ? `. Use "${replacement}" instead` : ""}`
+    );
+  }
+
+  // Check variant values
+  const variants = usage.variants as Record<string, unknown> | undefined;
+  if (variants && typeof variants === "object") {
+    for (const [key, value] of Object.entries(variants)) {
+      const variantGroup = manifest.variants[key];
+      if (!variantGroup) {
+        violations.push(
+          `Unknown variant "${key}". Available variants: ${Object.keys(manifest.variants).join(", ")}`
+        );
+        continue;
+      }
+      if (
+        typeof value === "string" &&
+        !variantGroup.values.includes(value)
+      ) {
         violations.push(
           `Invalid value "${value}" for variant "${key}". Allowed: ${variantGroup.values.join(", ")}`
         );
       }
-      if (
-        typeof value === "string" &&
-        variantGroup.deprecated?.includes(value)
-      ) {
-        const migration = variantGroup.migrations?.[value];
-        violations.push(
-          `Deprecated value "${value}" for variant "${key}"${migration ? `. Migrate to: "${migration}"` : ""}`
-        );
-      }
-    }
-
-    // Check prop deprecation
-    const propDef = manifest.props[key];
-    if (propDef?.deprecated) {
-      violations.push(
-        `Prop "${key}" is deprecated${propDef.replacement ? `. Use "${propDef.replacement}" instead` : ""}`
-      );
     }
   }
 
-  // Check required props
-  for (const [key, propDef] of Object.entries(manifest.props)) {
-    if (propDef.required && !(key in props)) {
-      violations.push(`Missing required prop: "${key}" (type: ${propDef.type})`);
+  // Check required slots
+  const providedSlots = usage.slots as string[] | undefined;
+  const providedSlotSet = new Set(providedSlots || []);
+  for (const slot of manifest.slots) {
+    if (slot.required && !providedSlotSet.has(slot.name)) {
+      violations.push(
+        `Missing required slot: "${slot.name}"`
+      );
     }
   }
 

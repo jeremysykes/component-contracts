@@ -52,6 +52,29 @@ export async function writeManifest(
   const dirPath = join(process.cwd(), REGISTRY_DIR);
   await mkdir(dirPath, { recursive: true });
 
+  // Preserve createdAt from existing manifest if it exists
+  let createdAt = manifest.createdAt;
+  if (await manifestExists(component)) {
+    try {
+      const existing = await readManifest(component);
+      if (existing.createdAt) {
+        createdAt = existing.createdAt;
+      }
+    } catch {
+      // If read fails, use the provided createdAt
+    }
+  }
+
+  const finalManifest: VariantManifest = {
+    ...manifest,
+    createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+
   const filePath = manifestPath(component);
-  await writeFile(filePath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
+  await writeFile(
+    filePath,
+    JSON.stringify(finalManifest, null, 2) + "\n",
+    "utf-8"
+  );
 }
