@@ -2,9 +2,9 @@
 
 ## Authority relationship
 
-- **d2c** (`/Users/jeremysykes/workspace/projects/d2c`) defines the product spec
+- **d2c** (https://github.com/jeremysykes/d2c) defines the product spec
 - **d2c schema**: `.claude/skills/d2c/schemas/variant-manifest.ts` — the authoritative `VariantManifest`
-- **component-contracts** (`/Users/jeremysykes/workspace/projects/component-contracts`) implements the MCP servers
+- **component-contracts** (https://github.com/jeremysykes/component-contracts) implements the MCP servers
 - **component-contracts schema**: `src/shared/schemas.ts` — must match d2c exactly
 
 ## MCP SDK dependency
