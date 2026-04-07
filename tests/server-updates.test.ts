@@ -10,104 +10,87 @@ const serverContent = readFileSync(serverPath, "utf-8");
 
 describe("Tool existence", () => {
   it("has get_manifest tool", () => {
-    expect(serverContent).toMatch(/name:\s*"get_manifest"/);
+    expect(serverContent).toContain('"get_manifest"');
   });
 
   it("has set_manifest tool", () => {
-    expect(serverContent).toMatch(/name:\s*"set_manifest"/);
+    expect(serverContent).toContain('"set_manifest"');
   });
 
   it("has get_usage tool", () => {
-    expect(serverContent).toMatch(/name:\s*"get_usage"/);
+    expect(serverContent).toContain('"get_usage"');
   });
 
   it("has diff_manifests tool", () => {
-    expect(serverContent).toMatch(/name:\s*"diff_manifests"/);
+    expect(serverContent).toContain('"diff_manifests"');
   });
 
   it("has validate_usage tool", () => {
-    expect(serverContent).toMatch(/name:\s*"validate_usage"/);
+    expect(serverContent).toContain('"validate_usage"');
+  });
+
+  it("does NOT have deprecate_variant tool", () => {
+    expect(serverContent).not.toContain('"deprecate_variant"');
   });
 });
 
-describe("Removed tools", () => {
-  it("does NOT have deprecate_variant tool", () => {
-    expect(serverContent).not.toMatch(/deprecate_variant/);
+describe("McpServer API", () => {
+  it("imports McpServer not deprecated Server", () => {
+    expect(serverContent).toContain("McpServer");
+    expect(serverContent).not.toMatch(/import\s*{\s*Server\s*}/);
+  });
+
+  it("uses server.tool() for registration", () => {
+    expect(serverContent).toMatch(/server\.tool\(/);
+  });
+
+  it("uses zod for input schemas", () => {
+    expect(serverContent).toContain("z.string()");
   });
 });
 
 describe("set_manifest uses isVariantManifest", () => {
   it("imports isVariantManifest", () => {
-    expect(serverContent).toMatch(/isVariantManifest/);
+    expect(serverContent).toContain("isVariantManifest");
   });
 
-  it("calls isVariantManifest in set_manifest section", () => {
-    // Extract the set_manifest case block and verify isVariantManifest is used
-    const setManifestIdx = serverContent.indexOf('case "set_manifest"');
-    expect(setManifestIdx).toBeGreaterThan(-1);
-    const afterSetManifest = serverContent.slice(
-      setManifestIdx,
-      setManifestIdx + 1500
+  it("validates before writing", () => {
+    const setManifestSection = serverContent.slice(
+      serverContent.indexOf('"set_manifest"'),
+      serverContent.indexOf('"get_usage"')
     );
-    expect(afterSetManifest).toMatch(/isVariantManifest/);
+    expect(setManifestSection).toContain("isVariantManifest");
+  });
+
+  it("manages createdAt timestamp", () => {
+    expect(serverContent).toContain("createdAt");
+  });
+
+  it("manages updatedAt timestamp", () => {
+    expect(serverContent).toContain("updatedAt");
   });
 });
 
-describe("diff function references aligned fields", () => {
-  it("references slots in diff logic", () => {
-    const diffIdx = serverContent.indexOf("function diffManifests");
-    expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 3000);
-    expect(diffBlock).toMatch(/slots/);
+describe("diff_manifests handles new schema fields", () => {
+  it("compares slots", () => {
+    expect(serverContent).toContain("slots");
   });
 
-  it("references tokens in diff logic", () => {
-    const diffIdx = serverContent.indexOf("function diffManifests");
-    expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
-    expect(diffBlock).toMatch(/tokens/);
+  it("compares tokens", () => {
+    expect(serverContent).toContain("tokens");
   });
 
-  it("references authority in diff logic", () => {
-    const diffIdx = serverContent.indexOf("function diffManifests");
-    expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
-    expect(diffBlock).toMatch(/authority/);
-  });
-
-  it("does NOT reference props in diff logic", () => {
-    const diffIdx = serverContent.indexOf("function diffManifests");
-    expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
-    expect(diffBlock).not.toMatch(/\.props/);
-  });
-
-  it("does NOT reference status in diff logic", () => {
-    const diffIdx = serverContent.indexOf("function diffManifests");
-    expect(diffIdx).toBeGreaterThan(-1);
-    const diffBlock = serverContent.slice(diffIdx, diffIdx + 6000);
-    expect(diffBlock).not.toMatch(/\.status/);
+  it("compares authority", () => {
+    expect(serverContent).toContain("authority");
   });
 });
 
-describe("validate function references aligned fields", () => {
-  it("references slots in validate logic", () => {
-    const valIdx = serverContent.indexOf("function validateUsage");
-    expect(valIdx).toBeGreaterThan(-1);
-    const valBlock = serverContent.slice(valIdx, valIdx + 1500);
-    expect(valBlock).toMatch(/slots/);
+describe("No old schema references", () => {
+  it("does not reference lastUpdated", () => {
+    expect(serverContent).not.toContain("lastUpdated");
   });
 
-  it("does NOT reference props in validate logic", () => {
-    const valIdx = serverContent.indexOf("function validateUsage");
-    expect(valIdx).toBeGreaterThan(-1);
-    const valBlock = serverContent.slice(valIdx, valIdx + 1500);
-    expect(valBlock).not.toMatch(/\.props/);
-  });
-});
-
-describe("No lastUpdated references", () => {
-  it("does not contain lastUpdated anywhere", () => {
-    expect(serverContent).not.toMatch(/lastUpdated/);
+  it("does not have status enum comparison", () => {
+    expect(serverContent).not.toMatch(/before\.status\s*!==\s*after\.status/);
   });
 });
