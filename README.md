@@ -42,6 +42,7 @@ interface VariantManifest {
   tokens: Record<string, TokenBinding>;
   authority: AuthorityMap;
   deprecated?: DeprecationInfo;
+  semanticTokenFile?: string;
   createdAt: string;
   updatedAt: string;
 }
