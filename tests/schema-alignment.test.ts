@@ -46,6 +46,10 @@ describe("VariantManifest schema alignment with d2c", () => {
     expect(schemasContent).toMatch(/authority:\s*AuthorityMap/);
   });
 
+  it("has optional semanticTokenFile field", () => {
+    expect(schemasContent).toMatch(/semanticTokenFile\?:\s*string/);
+  });
+
   it("has optional deprecated field (DeprecationInfo)", () => {
     expect(schemasContent).toMatch(/deprecated\?:\s*DeprecationInfo/);
   });
